@@ -18,20 +18,23 @@ def load_tracker_json() -> List[Dict]:
             return processed_mails
     except FileNotFoundError:
         return []
+    except json.decoder.JSONDecodeError:
+        logger.exception("The email tracker JSON file was corrupt. Reprocessing the whole inbox.")
+        return []
 
 
-def write_tracker_json(new_processed_mails: List[Dict]) -> None:
-    previously_processed_mails = load_tracker_json()
-    processed_mails = previously_processed_mails + new_processed_mails
+def write_tracker_json(previously_processed_emails: List[Dict], new_processed_emails: List[Dict]) -> None:
+    processed_emails = previously_processed_emails + new_processed_emails
+    processed_emails.sort(key=lambda x: x["id"])
 
     with open(settings.MAIL_TRACKER_JSON_FILE, "w") as tracker_file:
-        json.dump(processed_mails, tracker_file, ensure_ascii=False, indent=2)
+        json.dump(processed_emails, tracker_file, ensure_ascii=False, indent=2)
 
 
 def get_processed_email_ids() -> Set[str]:
     try:
         tracker_json = load_tracker_json()
-        processed_ids = set([ mail['id'] for mail in tracker_json ])
+        processed_ids = set([ f"{message['id']}" for message in tracker_json ])
         return processed_ids
     except IOError:
         return set()
@@ -41,6 +44,7 @@ def get_unprocessed_email_ids(data) -> Set[str]:
     all_ids = split_data_to_ids(data)
     processed_ids = get_processed_email_ids()
     unprocessed_ids = all_ids - processed_ids
+    logger.info(f"Found {len(unprocessed_ids)} new email messages to process.")
     return unprocessed_ids
 
 
@@ -118,8 +122,6 @@ def process_email(mail: imaplib.IMAP4_SSL, email_id: str) -> Dict:
     return message_dict
 
 
-
-
 def read_inbox() -> None:
     logger.info(f"Reading mailbox: {settings.MAILBOX_ADDRESS}")
 
@@ -132,10 +134,12 @@ def read_inbox() -> None:
     if not data:
         return
 
-    email_ids = get_unprocessed_email_ids(data[0])
-    processed_emails = []
+    email_ids, previously_processed_emails = get_unprocessed_email_ids(data[0])
+    new_processed_emails = []
     for email_id in email_ids:
         time.sleep(0.5)
-        process_email(mail, email_id)
+        new_processed_emails.append(process_email(mail, email_id))
 
-    write_tracker_json(processed_emails)
+    if new_processed_emails:
+        write_tracker_json(previously_processed_emails, new_processed_emails)
+

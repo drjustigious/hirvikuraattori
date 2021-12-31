@@ -128,8 +128,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-
-.json
-.jpg
-.jpeg
-.png
+# Specific to the Hirvikuraattori project
+*.json
+*.jpg
+*.jpeg
+*.png
