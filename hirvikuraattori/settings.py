@@ -19,3 +19,10 @@ IMAP_SERVER_PORT = os.getenv("IMAP_SERVER_PORT")
 MAIL_TRACKER_JSON_FILE = os.getenv("MAIL_TRACKER_JSON_FILE")
 LOG_FILE = os.getenv("LOG_FILE")
 LOG_LEVEL = os.getenv("LOG_LEVEL")
+
+SUPPORTED_IMAGE_EXTENSIONS = [
+    "jpg", "jpeg", "png"
+]
+STORED_EMAIL_METADATA = [
+    "subject", "from", "date"
+]

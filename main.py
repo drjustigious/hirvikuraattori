@@ -4,8 +4,8 @@ from hirvikuraattori.logs import logger
 
 def main():
     try:
-        logger.info(f"** Hirvikuraattori {settings.VERSION} starting a run.")
-        mail.read_email()
+        logger.info(f"Hirvikuraattori {settings.VERSION} starting a run.")
+        mail.read_inbox()
     except Exception as e:
         logger.exception(e)
 
