@@ -1,3 +1,4 @@
+import datetime
 import email
 from email.header import decode_header
 from email.message import Message
@@ -13,7 +14,7 @@ from hirvikuraattori.logs import logger
 
 def load_tracker_json() -> List[Dict]:
     try:
-        with open(settings.MAIL_TRACKER_JSON_FILE) as tracker_file:
+        with open(settings.MAIL_TRACKER_JSON_FILE, encoding="utf-8") as tracker_file:
             processed_mails = json.load(tracker_file)
             return processed_mails
     except FileNotFoundError:
@@ -27,25 +28,25 @@ def write_tracker_json(previously_processed_emails: List[Dict], new_processed_em
     processed_emails = previously_processed_emails + new_processed_emails
     processed_emails.sort(key=lambda x: x["id"])
 
-    with open(settings.MAIL_TRACKER_JSON_FILE, "w") as tracker_file:
+    with open(settings.MAIL_TRACKER_JSON_FILE, "w", encoding="utf-8") as tracker_file:
         json.dump(processed_emails, tracker_file, ensure_ascii=False, indent=2)
 
 
 def get_processed_email_ids() -> Set[str]:
     try:
-        tracker_json = load_tracker_json()
-        processed_ids = set([ f"{message['id']}" for message in tracker_json ])
-        return processed_ids
+        previously_processed_emails = load_tracker_json()
+        processed_ids = set([f"{message['id']}" for message in previously_processed_emails])
+        return processed_ids, previously_processed_emails
     except IOError:
-        return set()
+        return set(), []
 
 
 def get_unprocessed_email_ids(data) -> Set[str]:
     all_ids = split_data_to_ids(data)
-    processed_ids = get_processed_email_ids()
+    processed_ids, previously_processed_emails = get_processed_email_ids()
     unprocessed_ids = all_ids - processed_ids
     logger.info(f"Found {len(unprocessed_ids)} new email messages to process.")
-    return unprocessed_ids
+    return unprocessed_ids, previously_processed_emails
 
 
 def split_data_to_ids(data) -> Set[str]:
@@ -97,6 +98,9 @@ def download_attachment(part, message_dict):
     with open(attachment_filename, "wb") as downloaded_file:
         downloaded_file.write(part.get_payload(decode=True))
     logger.info(f"Email from {message_dict['from']} {message_dict['date']} '{message_dict['subject']}': Attachment '{attachment_filename}' downloaded.")
+    if "downloads" not in message_dict:
+        message_dict["downloads"] = []
+    message_dict["downloads"].append(attachment_filename)
 
 
 def process_email(mail: imaplib.IMAP4_SSL, email_id: str) -> Dict:
@@ -119,6 +123,7 @@ def process_email(mail: imaplib.IMAP4_SSL, email_id: str) -> Dict:
             continue
         download_attachment(part, message_dict)
 
+    message_dict["processed"] = f"{datetime.datetime.now()}"
     return message_dict
 
 
@@ -137,7 +142,7 @@ def read_inbox() -> None:
     email_ids, previously_processed_emails = get_unprocessed_email_ids(data[0])
     new_processed_emails = []
     for email_id in email_ids:
-        time.sleep(0.5)
+        time.sleep(0.2)
         new_processed_emails.append(process_email(mail, email_id))
 
     if new_processed_emails:
