@@ -5,6 +5,9 @@ from os import listdir, getcwd
 from os.path import isfile, join, splitext, getsize, getctime
 from typing import List, Dict, Tuple
 
+import boto3
+from botocore.exceptions import ClientError
+
 from hirvikuraattori import settings
 from hirvikuraattori.logs import logger
 from hirvikuraattori.utils import humanize_file_size
@@ -59,7 +62,19 @@ def get_processed_photos() -> Tuple[List[str], List[Dict]]:
         return set(), []
 
 
+def upload_file(filename):
+    s3_client = boto3.client(
+        service_name='s3',
+        aws_access_key_id=settings.S3_USER_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.S3_USER_SECRET_ACCESS_KEY,
+    )
+    s3_object_name = filename
+    logger.debug("Uploading file '{s3_object_name}'.")
+    s3_client.upload_file(filename, settings.S3_BUCKET_NAME, s3_object_name)
+
+
 def process_photo(filename: str) -> Dict:
+    upload_file(filename)
     photo = {
         "filename": filename,
         "size": humanize_file_size(getsize(filename)),
@@ -76,9 +91,10 @@ def process_photos(filenames_to_process: List[str]) -> List[Dict]:
         try:
             photo = process_photo(filename)
             processed_photos.append(photo)
-
         except OSError:
             logger.exception(f"Error accessing the file '{filename}' before upload.")
+        except ClientError as e:
+            logger.exception(f"S3 client error while uploading the file '{filename}': {e}.")
 
     return processed_photos
 
