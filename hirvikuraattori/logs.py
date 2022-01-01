@@ -4,7 +4,7 @@ from logging.handlers import RotatingFileHandler
 from hirvikuraattori import settings
 
 
-logFormatter = logging.Formatter("%(asctime)s %(levelname)-5.5s %(message)s")
+logFormatter = logging.Formatter("%(asctime)s %(levelname)-3.3s %(message)s")
 logger = logging.getLogger()
 
 fileHandler = RotatingFileHandler(

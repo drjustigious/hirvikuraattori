@@ -97,7 +97,7 @@ def download_attachment(part, message_dict):
     attachment_filename = part.get_filename()
     with open(attachment_filename, "wb") as downloaded_file:
         downloaded_file.write(part.get_payload(decode=True))
-    logger.info(f"Email from {message_dict['from']} {message_dict['date']} '{message_dict['subject']}': Attachment '{attachment_filename}' downloaded.")
+    logger.info(f"Email from {message_dict['from']} {message_dict['date']} '{message_dict['subject']}': Downloaded attachment '{attachment_filename}'.")
     if "downloads" not in message_dict:
         message_dict["downloads"] = []
     message_dict["downloads"].append(attachment_filename)
@@ -127,6 +127,14 @@ def process_email(mail: imaplib.IMAP4_SSL, email_id: str) -> Dict:
     return message_dict
 
 
+def process_emails(mail, email_ids):
+    new_processed_emails = []
+    for email_id in email_ids:
+        time.sleep(settings.SLEEP_TIME_SECONDS_BETWEEN_EMAILS)
+        new_processed_emails.append(process_email(mail, email_id))
+    return new_processed_emails
+
+
 def read_inbox() -> None:
     logger.info(f"Reading mailbox: {settings.MAILBOX_ADDRESS}")
 
@@ -140,10 +148,7 @@ def read_inbox() -> None:
         return
 
     email_ids, previously_processed_emails = get_unprocessed_email_ids(data[0])
-    new_processed_emails = []
-    for email_id in email_ids:
-        time.sleep(0.2)
-        new_processed_emails.append(process_email(mail, email_id))
+    new_processed_emails = process_emails(mail, email_ids)
 
     if new_processed_emails:
         write_tracker_json(previously_processed_emails, new_processed_emails)
