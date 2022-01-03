@@ -24,6 +24,7 @@ LOG_LEVEL = os.getenv("LOG_LEVEL")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 S3_USER_ACCESS_KEY_ID = os.getenv("S3_USER_ACCESS_KEY_ID")
 S3_USER_SECRET_ACCESS_KEY = os.getenv("S3_USER_SECRET_ACCESS_KEY")
+S3_PHOTOS_PREFIX = os.getenv("S3_PHOTOS_PREFIX")
 
 
 ### Additional settings. ###

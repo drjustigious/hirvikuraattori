@@ -20,7 +20,8 @@ def load_tracker_json() -> List[Dict]:
     except FileNotFoundError:
         return []
     except json.decoder.JSONDecodeError:
-        logger.exception("The email tracker JSON file was corrupt. Reprocessing the whole inbox.")
+        logger.exception(
+            "The email tracker JSON file was corrupt. Reprocessing the whole inbox.")
         return []
 
 
@@ -35,7 +36,8 @@ def write_tracker_json(previously_processed_emails: List[Dict], new_processed_em
 def get_processed_email_ids() -> Set[str]:
     try:
         previously_processed_emails = load_tracker_json()
-        processed_ids = set([f"{message['id']}" for message in previously_processed_emails])
+        processed_ids = set(
+            [f"{message['id']}" for message in previously_processed_emails])
         return processed_ids, previously_processed_emails
     except IOError:
         return set(), []
@@ -87,7 +89,8 @@ def attachment_is_downloadable(part):
 
     if extension.lower()[1:] not in settings.SUPPORTED_IMAGE_EXTENSIONS:
         supported_extensions = ", ".join(settings.SUPPORTED_IMAGE_EXTENSIONS)
-        logger.debug(f"Skipping email attachment '{attachment_filename}' because it is not one of the supported types ({supported_extensions}).")
+        logger.debug(
+            f"Skipping email attachment '{attachment_filename}' because it is not one of the supported types ({supported_extensions}).")
         return False
 
     return True
@@ -97,7 +100,8 @@ def download_attachment(part, message_dict):
     attachment_filename = part.get_filename()
     with open(attachment_filename, "wb") as downloaded_file:
         downloaded_file.write(part.get_payload(decode=True))
-    logger.info(f"Email from {message_dict['from']} {message_dict['date']} '{message_dict['subject']}': Downloaded attachment '{attachment_filename}'.")
+    logger.info(
+        f"Email from {message_dict['from']} {message_dict['date']} '{message_dict['subject']}': Downloaded attachment '{attachment_filename}'.")
     if "downloads" not in message_dict:
         message_dict["downloads"] = []
     message_dict["downloads"].append(attachment_filename)
@@ -152,4 +156,3 @@ def read_inbox() -> None:
 
     if new_processed_emails:
         write_tracker_json(previously_processed_emails, new_processed_emails)
-

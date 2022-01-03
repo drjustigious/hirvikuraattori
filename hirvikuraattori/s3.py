@@ -13,6 +13,10 @@ from hirvikuraattori.logs import logger
 from hirvikuraattori.utils import humanize_file_size
 
 
+# The start time of the run is used for generating the S3 object paths.
+run_start_time: datetime.datetime
+
+
 def load_tracker_json() -> List[Dict]:
     try:
         with open(settings.S3_TRACKER_JSON_FILE, encoding="utf-8") as tracker_file:
@@ -21,7 +25,8 @@ def load_tracker_json() -> List[Dict]:
     except FileNotFoundError:
         return []
     except json.decoder.JSONDecodeError:
-        logger.exception("The S3 tracker JSON file was corrupt. Reprocessing all downloaded photos.")
+        logger.exception(
+            "The S3 tracker JSON file was corrupt. Reprocessing all downloaded photos.")
         return []
 
 
@@ -46,7 +51,8 @@ def filter_photos_from_files(filenames: List[str]) -> List[str]:
 def get_unprocessed_photos() -> Tuple[List[str], List[Dict]]:
     processed_filenames, previously_processed_photos = get_processed_photos()
     working_directory = getcwd()
-    all_filenames = set([f for f in listdir(working_directory) if isfile(join(working_directory, f))])
+    all_filenames = set([f for f in listdir(working_directory)
+                        if isfile(join(working_directory, f))])
     photo_filenames = filter_photos_from_files(all_filenames)
     unprocessed_filenames = photo_filenames - processed_filenames
     logger.info(f"Found {len(unprocessed_filenames)} new photos to upload.")
@@ -56,25 +62,33 @@ def get_unprocessed_photos() -> Tuple[List[str], List[Dict]]:
 def get_processed_photos() -> Tuple[List[str], List[Dict]]:
     try:
         previously_processed_photos = load_tracker_json()
-        processed_filenames = set([f"{photo['filename']}" for photo in previously_processed_photos])
+        processed_filenames = set(
+            [f"{photo['filename']}" for photo in previously_processed_photos])
         return processed_filenames, previously_processed_photos
     except IOError:
         return set(), []
 
 
-def upload_file(filename):
+def construct_s3_path(filename: str, date: datetime.datetime) -> str:
+    s3_object_path = f"{settings.S3_PHOTOS_PREFIX}/{date.year}/{date.month}/{filename}"
+    return s3_object_path
+
+
+def upload_file(filename, s3_object_name):
     s3_client = boto3.client(
         service_name='s3',
         aws_access_key_id=settings.S3_USER_ACCESS_KEY_ID,
         aws_secret_access_key=settings.S3_USER_SECRET_ACCESS_KEY,
     )
-    s3_object_name = filename
-    logger.debug("Uploading file '{s3_object_name}'.")
+
+    logger.info(f"Uploading file '{s3_object_name}'.")
     s3_client.upload_file(filename, settings.S3_BUCKET_NAME, s3_object_name)
 
 
 def process_photo(filename: str) -> Dict:
-    upload_file(filename)
+    global run_start_time
+    s3_object_name = construct_s3_path(filename, run_start_time)
+    upload_file(filename, s3_object_name)
     photo = {
         "filename": filename,
         "size": humanize_file_size(getsize(filename)),
@@ -92,15 +106,19 @@ def process_photos(filenames_to_process: List[str]) -> List[Dict]:
             photo = process_photo(filename)
             processed_photos.append(photo)
         except OSError:
-            logger.exception(f"Error accessing the file '{filename}' before upload.")
+            logger.exception(
+                f"Error accessing the file '{filename}' before upload.")
         except ClientError as e:
-            logger.exception(f"S3 client error while uploading the file '{filename}': {e}.")
+            logger.exception(
+                f"S3 client error while uploading the file '{filename}': {e}.")
 
     return processed_photos
 
 
 def push_photos() -> None:
+    global run_start_time
     logger.info(f"Pushing new photos to S3 bucket: {settings.S3_BUCKET_NAME}")
+    run_start_time = datetime.datetime.utcnow()
     filenames_to_process, previously_processed_photos = get_unprocessed_photos()
     new_processed_photos = process_photos(filenames_to_process)
     if new_processed_photos:
