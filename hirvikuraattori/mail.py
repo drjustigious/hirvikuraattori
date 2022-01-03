@@ -10,6 +10,7 @@ from typing import List, Dict, Set, ByteString, Tuple
 
 from hirvikuraattori import settings
 from hirvikuraattori.logs import logger
+from hirvikuraattori.utils import extract_camera_metadata
 
 
 def load_tracker_json() -> List[Dict]:
@@ -115,20 +116,39 @@ def process_email(mail: imaplib.IMAP4_SSL, email_id: str) -> Dict:
 
     email_message = get_email_message(data)
     message_dict = get_email_message_dict(email_message, email_id)
-    for part in email_message.walk():
-        skip_this_part = (
-            part.get_content_maintype() == "multipart" or
-            part.get('Content-Disposition') is None or
-            not part.get_filename()
-        )
-        if skip_this_part:
-            continue
-        if not attachment_is_downloadable(part):
-            continue
-        download_attachment(part, message_dict)
-
+    if email_message.is_multipart():
+        process_email_parts(email_message.get_payload(), message_dict)
     message_dict["processed"] = f"{datetime.datetime.now()}"
     return message_dict
+
+
+def process_email_parts(parts: List[Message], message_dict: Dict):
+    attachments_to_download = []
+    camera_metadata = None
+    for part in parts:
+        is_attachment = (
+            not part.is_multipart() and
+            part.get('Content-Disposition') is not None
+            and part.get_filename()
+        )
+
+        if is_attachment and attachment_is_downloadable(part):
+            attachments_to_download.append(part)
+            continue
+
+        # The part was not an attachment but may contain the body of the
+        # message. Try to extract the trail camera metadata from it.
+        if part.is_multipart():
+            continue
+        camera_metadata = extract_camera_metadata(part.get_payload())
+
+    for part in attachments_to_download:
+        download_attachment(part, message_dict)
+
+        # TODO: Write camera metadata about downloaded attachment to DynamoDB.
+        # Copy metadata for each photo included in message.
+        if camera_metadata:
+            pass
 
 
 def process_emails(mail: imaplib.IMAP4_SSL, email_ids: str) -> List[Dict]:
@@ -146,13 +166,13 @@ def read_inbox() -> None:
     mail.login(settings.MAILBOX_ADDRESS, settings.MAILBOX_PASSWORD)
     mail.select("inbox")
 
-    response, data = mail.search(None, "ALL")
+    response, data = mail.search(
+        None, f'(FROM "{settings.EMAIL_FILTER_FROM}")')
     assert response == "OK"
     if not data:
         return
 
     email_ids, previously_processed_emails = get_unprocessed_email_ids(data[0])
     new_processed_emails = process_emails(mail, email_ids)
-
     if new_processed_emails:
         write_tracker_json(previously_processed_emails, new_processed_emails)
